@@ -1,46 +1,56 @@
 // ============================================================
-// 九号出行 · 响应体大小探针（配合 probe-spoof.js 使用）
+// 九号出行 · 响应探针（配合 probe-v6.js 改道探针使用）
 // ============================================================
-// 统计同一接口在「原版请求头」与「伪装旧版请求头」下的加密响应字节数。
-// 因为响应体是加密的，唯一可观测的信号就是长度变化：
-//   变长 => 服务端多下发了字段（很可能就是 speed 相关字段）
-//   不变 => 服务端不按 APP 版本区分，需换思路
-// 结果通过 $notification 弹出，并写入 $persistentStore。
+// 响应体是 nbcrypto 加密的，唯一可观测的信号是「状态码 + 字节数」。
+// 每次 Together with 改道探针轮换候选，这里把结果记录下来：
+//
+//   老接口 200 且响应明显大于基线  => 老接口还活着且返回更多字段（大概率含速度）
+//   老接口 200 但响应很小          => 接口活着但参数不兼容（缺字段/报错 JSON）
+//   老接口 404 / 4xx / 5xx        => 已下线，改道路线走不通
+//   两者都差不多                  => 服务端确实按数据结构而非版本区分
 // ============================================================
 
-var KEY = 'nb_probe_sizes';
+var SIZE_KEY = 'nb_probe_sizes_v2';
+var ROUTE_KEY = 'nb_probe_last_route';
 
 (function () {
   try {
     if (typeof $request === 'undefined' || typeof $response === 'undefined') return $done({});
 
     var url = $request.url || '';
-    if (!/cnnx-omsgw\.ninebot\.com\/app-api\/travel/.test(url)) return $done({});
+    if (!/ninebot\.com\/app-api\/travel/.test(url)) return $done({});
 
     var body = $response.body;
     var len = body ? body.length : 0;
+    var status = $response.status || 0;
     var path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
 
-    var store = {};
-    try { store = JSON.parse($persistentStore.read(KEY) || '{}'); } catch (e) { store = {}; }
+    var label = '原样';
+    try {
+      var r = $persistentStore.read(ROUTE_KEY);
+      if (r && r.indexOf('|') > 0) {
+        var idx = r.split('|')[0];
+        label = (idx === 'BASELINE' || idx === '0') ? '轮次0基线' : ('轮次' + idx + '改道');
+      }
+    } catch (e) {}
 
-    var prev = store[path];
-    var msg;
-    if (!prev) {
-      msg = '首次记录 ' + len + ' 字节';
-    } else {
-      var diff = len - prev.best;
-      msg = '上次 ' + prev.best + ' -> 本次 ' + len + ' 字节 (' +
-            (diff > 0 ? '+' : '') + diff + ')';
-      if (len > prev.best) msg += ' ⬆ 变大了';
-      else if (len < prev.best) msg += ' ⬇ 变小了';
-      else msg += ' 无变化';
+    var store = {};
+    try { store = JSON.parse($persistentStore.read(SIZE_KEY) || '{}'); } catch (e) { store = {}; }
+
+    var key = label + ' ' + path.slice(-45);
+    var prev = store[key];
+    var msg = 'HTTP ' + status + ' · ' + len + ' 字节';
+    if (prev && typeof prev === 'number') {
+      var diff = len - prev;
+      if (diff > 0) msg += ' (+' + diff + ' ⬆ 变大)';
+      else if (diff < 0) msg += ' (' + diff + ' ⬇ 变小)';
+      else msg += ' (与上次一致)';
     }
-    store[path] = { best: Math.max(prev ? prev.best : 0, len), last: len };
-    try { $persistentStore.write(JSON.stringify(store), KEY); } catch (e) {}
+    store[key] = len;
+    try { $persistentStore.write(JSON.stringify(store), SIZE_KEY); } catch (e) {}
 
     if (typeof $notification !== 'undefined') {
-      $notification.post('九号速度探针', path.slice(-40), msg);
+      $notification.post('九号速度探针', key, msg);
     }
     $done({});
   } catch (e) {
