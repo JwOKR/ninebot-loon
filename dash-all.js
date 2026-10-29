@@ -1,18 +1,14 @@
 /*
- * 九号出行 · 全量请求嗅探（Loon http-response）
+ * 九号出行 · 请求嗅探 v2（Loon http-response）
  *
- * 用途
+ * 修正
  * ----
- * 上一版只盯 device-config / .nb / sign 三类地址，结果一条都没命中。
- * 这说明：要么 iOS 端用的域名不在列表里，要么它根本不发这些请求。
- * 本脚本改成「凡是 ninebot / segway 域名的请求，全部记录」，
- * 用来回答一个最基础的问题：九号 iOS 端到底在跟哪些服务器说话。
- *
- * 规则
- * ----
- * - 同一路径只报一次（去重），每天自动重置
- * - 疑似配置/仪表相关的打 ★，且配额更高（30 条）
- * - 其余普通请求最多报 12 条，避免通知轰炸
+ * 1. 上一版 HTTP 状态恒为 0：Loon 的字段是 $response.status，不是 statusCode
+ * 2. 上一版对每条 ninebot 请求都弹通知，噪音大；本版分级：
+ *    ★★★ 配置/仪表文件类（device-config / .nb / .sign / sign-content）→ 必报
+ *    ★    主题/动态/OTA 类（theme / dynamic / dashboard / device_ui / ota）→ 报
+ *    普通  业务接口 → 只有出错（status>=400）才报
+ * 3. 命中配置文件时把完整 URL 记进 persistentStore，便于后续替换时取用
  */
 
 (function () {
@@ -29,33 +25,35 @@
 
   try {
     var url = ($request && $request.url) || '';
-    var st = ($response && $response.statusCode) || 0;
-    var body = ($response && $response.body) || '';
+    var res = $response || {};
+    var st = typeof res.status === 'number' ? res.status : (typeof res.statusCode === 'number' ? res.statusCode : -1);
+    var body = res.body || '';
 
-    var pm = url.match(/^https?:\/\/([^\/]+)(\/[^?#]*)/);
+    var pm = url.match(/^https?:\/\/([^\/]+)([^?#]*)/);
     var host = pm ? pm[1] : '';
     var path = pm ? pm[2] : url;
 
-    var interesting =
-      /device-config|sign-content|dynamic|dashboard|device_ui|\.nb$|\.sign$|theme|resource|ota|zip/i.test(path);
+    var isFile = /device-config|sign-content|\.nb$|\.sign$/i.test(path);
+    var isSoft = /theme|dynamic|dashboard|device_ui|ota|resource|zip/i.test(path);
 
-    var raw = null;
-    try { raw = $persistentStore.read('nb_all_seen'); } catch (e) {}
-    var store = null;
+    if (isFile) {
+      try { $persistentStore.write(url, 'nb_cfg_url'); } catch (e) {}
+    }
+
+    // 普通业务接口：静默（除非出错）
+    if (!isFile && !isSoft && st >= 0 && st < 400) return $done({});
+
+    // 去重（每天）
+    var raw = null, store = null;
+    try { raw = $persistentStore.read('nb_seen'); } catch (e) {}
     try { store = raw ? JSON.parse(raw) : null; } catch (e) { store = null; }
-    if (!store || store.d !== today()) store = { d: today(), hot: [], cold: [] };
-
-    var bucket = interesting ? 'hot' : 'cold';
-    var limit = interesting ? 30 : 12;
-
-    if (store[bucket].indexOf(path) >= 0) return $done({});
-    if (store[bucket].length >= limit) return $done({});
-    store[bucket].push(path);
-    try { $persistentStore.write(JSON.stringify(store), 'nb_all_seen'); } catch (e) {}
+    if (!store || store.d !== today()) store = { d: today(), p: [] };
+    if (store.p.indexOf(path) >= 0) return $done({});
+    if (store.p.length >= 40) return $done({});
+    store.p.push(path);
+    try { $persistentStore.write(JSON.stringify(store), 'nb_seen'); } catch (e) {}
 
     var file = path.split('/').pop() || '(目录)';
-    var short = path.length > 70 ? path.slice(0, 34) + '…' + path.slice(-32) : path;
-
     var size = body.length;
     var enc = '空';
     if (size > 0) {
@@ -65,13 +63,10 @@
       else enc = '其他';
     }
 
-    notify(
-      (interesting ? '★九号请求 ' : '九号请求 ') + host,
-      file,
-      'HTTP ' + st + ' · ' + size + 'B · ' + enc +
-        (interesting ? '\n★疑似配置/仪表相关' : '') +
-        '\n' + short
-    );
+    var mark = isFile ? '★★★九号配置文件' : (isSoft ? '★九号配置' : '九号请求(异常)');
+    var shortPath = path.length > 200 ? path.slice(0, 96) + '…' + path.slice(-96) : path;
+
+    notify(mark, file, 'HTTP ' + st + ' · ' + size + 'B · ' + enc + '\n' + host + '\n' + shortPath);
   } catch (e) {
     notify('九号嗅探异常', '', String(e));
   }
