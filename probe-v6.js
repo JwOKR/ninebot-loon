@@ -15,10 +15,10 @@
 // 注意：改道后 APP 很可能报错或显示异常，这是正常的，不是坏了。
 // ============================================================
 
+// 已实测：v6/travel-info 返回 200 但只有 336 字节（说明路由存活、入参不兼容）。
+// 现在固定改道到它，配合 nb-body 脚本把响应内容直接读出来定性。
 var CANDIDATES = [
-  null,                                      // 轮次0：原样放行（基线）
-  '/app-api/travel/v6/travel-info',          // 轮次1：老详情接口
-  '/app-api/travel/v6/travel/travel-info'    // 轮次2：另一种路径写法
+  '/app-api/travel/v6/travel-info'
 ];
 
 var STORE_ROUND = 'nb_probe_round';
