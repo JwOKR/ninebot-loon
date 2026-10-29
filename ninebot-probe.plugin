@@ -1,5 +1,5 @@
-#!name = 九号类目伪装 v8
-#!desc = 轮换改写 business-type 请求头（steeldust/ebike/os_ebike/assisted_ebike），找会下发速度的车型类目
+#!name = 九号类目伪装 v9
+#!desc = 改写 business-type 数值（1=MOTOR_STEELDUST 2=MOTOR_EBIKE 3=ASSISTED_EBIKE），验证 steeldust 类目是否下发速度
 #!author = JwOKR
 #!date = 2026-10-30
 
@@ -7,5 +7,5 @@
 hostname = cnnx-omsgw.ninebot.com
 
 [Script]
-http-request ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@635ba33f46bb2c25137bde20671943c39a6e240d/probe-bt.js,tag=nb-bt,enable=true
-http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@635ba33f46bb2c25137bde20671943c39a6e240d/probe-dump.js,requires-body=true,tag=nb-dump,enable=true
+http-request ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@bc30eb7a2b8760fb409ed9c3aa4e008db7b5e8c1/probe-bt.js,tag=nb-bt,enable=true
+http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@bc30eb7a2b8760fb409ed9c3aa4e008db7b5e8c1/probe-dump.js,requires-body=true,tag=nb-dump,enable=true
