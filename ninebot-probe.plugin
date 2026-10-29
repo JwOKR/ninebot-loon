@@ -1,0 +1,11 @@
+#!name = Ninebot Probe
+#!desc = 九号轨迹速度下发条件探针：伪装旧版APP请求头，对比加密响应体积变化
+#!author = JwOKR
+#!date = 2026-10-30
+
+[MITM]
+hostname = cnnx-omsgw.ninebot.com
+
+[Script]
+http-request ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@8fe4c0f/probe-spoof.js,requires-body=true,tag=nb-spoof,enable=true
+http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@8fe4c0f/probe-size.js,requires-body=true,tag=nb-size,enable=true
