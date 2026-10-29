@@ -62,9 +62,7 @@ if (typeof $request === 'undefined' || typeof $response === 'undefined') {
     const url = $request.url || '';
     const body = ($response.body !== undefined && $response.body !== null) ? String($response.body) : '';
 
-    if (!PATH_RE.test(url)) {
-      $done({});
-    } else {
+    {
       const json = safeParse(body);
       if (!json) {
         $notification.post('九号轨迹捕获', '响应非JSON或已加密', url.slice(0, 200));
