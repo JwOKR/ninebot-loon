@@ -1,11 +1,11 @@
-#!name = 九号网关探针 v7
-#!desc = OMS 同族网关轮换（dev/test3/eu/fra/sg）+ 基线轮次导出完整请求头，定位车型类目判据
+#!name = 九号类目伪装 v8
+#!desc = 轮换改写 business-type 请求头（steeldust/ebike/os_ebike/assisted_ebike），找会下发速度的车型类目
 #!author = JwOKR
 #!date = 2026-10-30
 
 [MITM]
-hostname = cnnx-omsgw.ninebot.com, cn-dev-oms-gateway.ninebot.com, cn-test3-oms-gateway.ninebot.com, eu-oms-gateway.ninebot.com, fra-oms-gateway.ninebot.com, sg-test1-oms-gateway.ninebot.com, sg-uat-oms-gateway.ninebot.com
+hostname = cnnx-omsgw.ninebot.com
 
 [Script]
-http-request ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@3365399bdd0d607f58173a91dd82ee7b72821966/probe-host.js,tag=nb-host,enable=true
-http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@8b8b7c913d4b206af0095db1e3aa8b0142224b65/probe-dump.js,requires-body=true,tag=nb-dump,enable=true
+http-request ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@635ba33f46bb2c25137bde20671943c39a6e240d/probe-bt.js,tag=nb-bt,enable=true
+http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@635ba33f46bb2c25137bde20671943c39a6e240d/probe-dump.js,requires-body=true,tag=nb-dump,enable=true
