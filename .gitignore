@@ -2,3 +2,4 @@
 *.hbc
 *_strings.txt
 __pycache__/
+dynamic_config.json
