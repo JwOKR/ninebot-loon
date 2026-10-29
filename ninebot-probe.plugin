@@ -1,5 +1,5 @@
-#!name = Ninebot Probe v3
-#!desc = 九号轨迹速度探针：把 v1/travel/query-info 改道到 v6/travel-info，并读出响应体内容
+#!name = 九号轨迹探针 v4
+#!desc = 修复响应脚本不触发：基线/改道 v6 交替，并直接读出响应体内容
 #!author = JwOKR
 #!date = 2026-10-30
 
@@ -7,6 +7,6 @@
 hostname = cnnx-omsgw.ninebot.com
 
 [Script]
-http-request ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@a34a776/probe-v6.js,tag=nb-route,enable=true
-http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v6 script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@a34a776/probe-body.js,requires-body=true,tag=nb-body,enable=true
-http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@a34a776/probe-size.js,requires-body=true,tag=nb-size,enable=true
+http-request ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@b145f27e1fb9fa2c2b46545a3353bd34bfea98af/probe-route.js,tag=nb-route,enable=true
+http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@b145f27e1fb9fa2c2b46545a3353bd34bfea98af/probe-dump.js,requires-body=true,tag=nb-dump,enable=true
+http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v6 script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@b145f27e1fb9fa2c2b46545a3353bd34bfea98af/probe-dump.js,requires-body=true,tag=nb-dump6,enable=true
