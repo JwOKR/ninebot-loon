@@ -60,6 +60,29 @@ var STORE_ROUTE = 'nb_probe_last_route';
 
     if (!CANDIDATES[idx]) {
       try { $persistentStore.write('PASS|' + origin, STORE_ROUTE); } catch (e) {}
+
+      // 基线轮次顺带导出完整请求头：用来确认服务端是否有明文的车型/类目判据
+      try {
+        var hs = $request.headers || {};
+        var names = [];
+        for (var k in hs) {
+          if (Object.prototype.hasOwnProperty.call(hs, k)) names.push(k);
+        }
+        var pairs = [];
+        for (var i2 = 0; i2 < names.length; i2++) {
+          var v = String(hs[names[i2]]);
+          if (v.length > 44) v = v.slice(0, 44) + '…';
+          pairs.push(names[i2] + '=' + v);
+        }
+        if (typeof $notification !== 'undefined') {
+          $notification.post(
+            '九号请求头 · ' + names.length + '个',
+            '原始请求头（基线轮次导出）',
+            names.join(', ') + '\n---\n' + pairs.join('\n').slice(0, 760)
+          );
+        }
+      } catch (eh) {}
+
       if (typeof $notification !== 'undefined') {
         $notification.post('九号网关探针', '0/6 基线 · 原样放行', 'cnnx-omsgw 原样，记录真实响应大小');
       }
