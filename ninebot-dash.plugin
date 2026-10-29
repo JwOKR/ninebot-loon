@@ -1,11 +1,11 @@
-#!name = 九号仪表配置扫描
-#!desc = 抓出仪表 UI 配置 device_ui_dashboard.nb 与配套 sign 文件的下载地址，为替换旧版仪表做准备
+#!name = 九号配置扫描 v2
+#!desc = 全量嗅探 ninebot 域名的每一次请求，找出 iOS 端仪表配置 / 签名的真实下载地址
 #!author = JwOKR
 #!date = 2026-10-30
 
 [MITM]
-hostname = oms-oss-public.ninebot.com, oms-oss-public-test.ninebot.com, cnnx-omsgw.ninebot.com
+hostname = *.ninebot.com, *.ninebot.cn, *.segwaydiscovery.com, oms-oss-public.ninebot.com, oms-oss-public-test.ninebot.com, cnnx-omsgw.ninebot.com
 
 [Script]
-http-response ^https?:\/\/[A-Za-z0-9.\-]+\.ninebot\.com\/(?:.*(?:device-config|sign-content).*|.*\.nb(?:\?.*)?$|.*\.sign(?:\?.*)?$) script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@78b33f042ce27e771e90776fb9e00bd735a8ea89/dash-scan.js,tag=nb-dash-scan,requires-body=true,enable=true
-http-response ^https?:\/\/[A-Za-z0-9.\-]+\.ninebot\.com\/(?:.*(?:device-config|sign-content).*|.*\.nb(?:\?.*)?$|.*\.sign(?:\?.*)?$) script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@78b33f042ce27e771e90776fb9e00bd735a8ea89/dash-swap.js,tag=nb-dash-swap,requires-body=true,enable=true
+http-response ^https?:\/\/[^\/]*(?:ninebot|segway) script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@<SHA>/dash-all.js,tag=nb-dash-all,requires-body=true,enable=true
+http-response ^https?:\/\/[^\/]*(?:ninebot|segway) script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@<SHA>/dash-scan.js,tag=nb-dash-scan,requires-body=true,enable=true
