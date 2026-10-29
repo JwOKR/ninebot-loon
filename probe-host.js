@@ -1,30 +1,43 @@
 // ============================================================
-// 九号出行 · 网关改道探针 v5
+// 九号出行 · OMS 网关环境改道探针 v6
 // ============================================================
-// 逆向新发现（动态配置 hosts 表）：
-//   assisted_ebike      -> https://cnnx-omsgw.ninebot.com        <- 你当前打的
-//   assisted_ebike_os   -> https://fra-oms-gateway.ninebot.com   <- 欧洲区孪生
-//   ebike               -> https://ebike.ninebot.com
-//   os_ebike            -> https://ebike-os.ninebot.com
-//   steeldust           -> https://steeldust.ninebot.com
-// 你的车属 assisted_ebike 组（仅 5 款电助力：Xyber/Xafari/MUXI/Myon/Xyber Air），
-// 走的是独立后端，很可能该后端的轨迹接口就没有实现速度下发。
+// 本轮修正（重要）：
+//   上一版把 cnnx-omsgw 当成 assisted_ebike 专属网关，是错的。
+//   实际它是【中国区 OMS 出行网关】，同族还有 dev/test3/eu/fra/sg 等环境，
+//   所有车型的轨迹(travel)接口统一走 OMS。
+//   已实测（本地直连 GET）：
+//     cnnx-omsgw / cn-dev-oms-gateway / cn-test3-oms-gateway
+//     eu-oms-gateway / fra-oms-gateway / sg-test1 / sg-uat
+//        => 全部 HTTP 200，93 字节，明文 {"code":500001,"desc":"Service error..."}
+//     steeldust / ebike / ebike-os
+//        => HTTP 404 "request not found!"（车型网关根本没有 travel 接口）
+//   => 所以本版只轮换 OMS 同族网关，车型网关已剔除。
 //
-// 本脚本每次触发轮换一个候选网关，只替换 scheme+host，路径和 query 原样保留。
-// 轮次 0 = 基线原样放行；之后依次改道到欧区 / ebike / os_ebike / steeldust。
-// 配合 probe-dump.js 观察：状态码、字节数、响应体是明文错误还是加密信封。
-// 判断标准：某个网关返回 200 且字节数明显大于基线 => 那套后端返回了更多字段。
+// 为什么值得再试一枪：
+//   新国标速度剔除、以及响应体加密，通常只在【生产环境】开启；
+//   dev / test3 / 欧区环境常常关闭这两项。
+//   请求体我们原样沿用（加密体不改），只要目标网关用同一套密钥，
+//   就能解密入库查到同一条轨迹；若那套环境返回明文 JSON，
+//   我们就能直接看到完整字段，判断是否含速度。
+//
+// 判断标准（看「九号响应体」通知）：
+//   HTTP 200 + 93B      = 服务错误，请求没被接受（无效）
+//   HTTP 200 + 万级字节 = 命中！看是明文还是信封
+//   ★明文 JSON          = 最大成功，通知里直接贴出字段
+//   加密信封 a=...      = 该环境也加密，继续轮换
 // ============================================================
 
 var CANDIDATES = [
-  null,                                   // 轮次0：基线，原样放行
-  'https://fra-oms-gateway.ninebot.com',  // 欧区 assisted_ebike_os
-  'https://ebike.ninebot.com',
-  'https://ebike-os.ninebot.com',
-  'https://steeldust.ninebot.com'
+  null,                                       // 0 基线：cnnx-omsgw 原样
+  'https://cn-dev-oms-gateway.ninebot.com',   // 1 开发环境（最可能关加密/关合规）
+  'https://cn-test3-oms-gateway.ninebot.com', // 2 测试环境
+  'https://eu-oms-gateway.ninebot.com',       // 3 欧洲区
+  'https://fra-oms-gateway.ninebot.com',      // 4 欧区 assisted_ebike_os
+  'https://sg-test1-oms-gateway.ninebot.com', // 5 新加坡测试
+  'https://sg-uat-oms-gateway.ninebot.com'    // 6 新加坡 UAT
 ];
 
-var STORE_ROUND = 'nb_probe_round2';
+var STORE_ROUND = 'nb_probe_round3';
 var STORE_ROUTE = 'nb_probe_last_route';
 
 (function () {
@@ -48,7 +61,7 @@ var STORE_ROUTE = 'nb_probe_last_route';
     if (!CANDIDATES[idx]) {
       try { $persistentStore.write('PASS|' + origin, STORE_ROUTE); } catch (e) {}
       if (typeof $notification !== 'undefined') {
-        $notification.post('九号网关探针', '基线 · 原样放行', 'cnnx-omsgw 原样，记录真实响应大小');
+        $notification.post('九号网关探针', '0/6 基线 · 原样放行', 'cnnx-omsgw 原样，记录真实响应大小');
       }
       return $done({});
     }
@@ -58,10 +71,14 @@ var STORE_ROUTE = 'nb_probe_last_route';
     var pathQuery = slashAfterHost >= 0 ? origin.slice(slashAfterHost) : '/';
     var newUrl = CANDIDATES[idx] + pathQuery;
 
-    try { $persistentStore.write('H' + idx + '|' + newUrl, STORE_ROUTE); } catch (e) {}
+    try { $persistentStore.write('H|' + newUrl, STORE_ROUTE); } catch (e) {}
 
     if (typeof $notification !== 'undefined') {
-      $notification.post('九号网关探针', '轮次' + idx + ' · 改道', CANDIDATES[idx]);
+      $notification.post(
+        '九号网关探针',
+        idx + '/' + (CANDIDATES.length - 1) + ' · 改道',
+        CANDIDATES[idx].replace('https://', '')
+      );
     }
 
     // 不传 body / headers => 沿用原加密请求体与原请求头

@@ -1,18 +1,15 @@
 // ============================================================
-// 九号出行 · 响应体 + 字节数 一体探针 (v4)
+// 九号出行 · 响应体判读探针 v6
 // ============================================================
-// 修复 v3 的致命 bug：
-//   Loon 的 http-response 脚本是按【原始请求 URL】匹配的，
-//   请求改写（$done({url})) 只改变实际发出去的地址，不改匹配依据。
-//   所以 v3 里匹配 .../travel/v6 的 nb-body 一次都没被触发过。
-//   现在改为：请求脚本周转 0=基线原样放行 / 1=改道 v6，
-//   响应脚本固定匹配原始 URL（v1/travel/query-info），同时输出
-//   状态码、字节数、以及响应体前半段内容。
+// 匹配【原始请求 URL】（v1/travel/query-info），不受请求改写影响。
+// 输出：当前模式 / HTTP 状态码 / 字节数 / 响应体性质。
 //
-// 三种结果的含义：
-//   1) 明文 JSON 带 code/msg   => 拿到 v6 失败的确切原因，可以判定是否还有救
-//   2) 仍是 {"a":"..."} 信封   => v6 也走同一套业务加密，此路不通
-//   3) 空 / 非 JSON / HTML     => 网关直接拒绝，此路不通
+// 判读表：
+//   ┌ HTTP 200 + ~93B  + code:500001  → 服务错误，请求未被接受（该网关无效）
+//   ├ HTTP 200 + 万级字节 + {"a":"…"} → 加密信封，该环境也加密
+//   ├ HTTP 200 + 万级字节 + ★明文JSON → 命中！直接看字段里有没有速度
+//   └ 其他                             → 网关拒绝
+// 明文时会自动检索 speed / maxSpeed / avgSpeed 等关键字并报告是否出现。
 // ============================================================
 
 (function () {
@@ -28,40 +25,50 @@
 
     var path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
 
-    // 当前处于哪个模式（由 probe-route.js 写入）
     var mode = '未知';
     try {
       var r = $persistentStore.read('nb_probe_last_route') || '';
-      if (r.indexOf('PASS') === 0) mode = '基线原样';
-      else if (r.indexOf('V6') === 0) mode = '改道v6';
-      else if (r.indexOf('H') === 0) {
+      if (r.indexOf('PASS') === 0) mode = '基线 cnnx-omsgw';
+      else if (r.indexOf('V6') === 0) mode = '改道 v6';
+      else if (r.indexOf('H|') === 0) {
         var h = r.split('|')[1] || '';
-        var host = h.replace(/^https?:\/\//, '').split('/')[0];
-        mode = '改道 ' + host;
+        mode = '改道 ' + h.replace(/^https?:\/\//, '').split('/')[0];
       }
     } catch (e) {}
 
-    var info;
+    var title = mode + ' · HTTP ' + status + ' · ' + s.length + 'B';
+    var info = '';
+    var big = false;
+
     if (!s) {
       info = '空响应体';
     } else if (s.charAt(0) === '{' || s.charAt(0) === '[') {
-      var ok = false;
-      try {
-        var j = JSON.parse(s);
-        ok = true;
-        if (j && typeof j.a === 'string') {
-          info = '加密信封 a=' + j.a.length + ' 字符\n' + s.slice(0, 60);
+      var parsed = null;
+      try { parsed = JSON.parse(s); } catch (e2) {}
+      if (!parsed) {
+        info = '类JSON但解析失败: ' + s.slice(0, 200);
+      } else if (parsed && typeof parsed.a === 'string') {
+        info = '加密信封 a=' + parsed.a.length + ' 字符\n' + s.slice(0, 50);
+      } else {
+        var flat = JSON.stringify(parsed);
+        var code = (parsed.code !== undefined) ? String(parsed.code) : '';
+        if (code === '500001' || code === '404' || code === '401' || code === '403') {
+          info = '✗ 业务拒绝 code=' + code + '\n' + flat.slice(0, 240);
         } else {
-          info = '★明文 ' + JSON.stringify(j).slice(0, 320);
+          big = true;
+          info = '★★明文JSON★★\n' + flat.slice(0, 700);
+          var keys = ['speed', 'Speed', 'maxSpeed', 'avgSpeed', 'velocity'];
+          var found = [];
+          for (var i = 0; i < keys.length; i++) {
+            if (flat.indexOf(keys[i]) >= 0) found.push(keys[i]);
+          }
+          info += '\n【速度字段】' + (found.length ? '命中 ' + found.join(',') : '未出现');
         }
-      } catch (e2) {
-        ok = false;
       }
-      if (!ok) info = '类JSON但解析失败: ' + s.slice(0, 220);
     } else if (s.charAt(0) === '<') {
-      info = 'HTML/网关页: ' + s.slice(0, 180);
+      info = 'HTML/网关页: ' + s.slice(0, 150);
     } else {
-      info = '非JSON: ' + s.slice(0, 220);
+      info = '非JSON: ' + s.slice(0, 200);
     }
 
     var ct = '';
@@ -73,8 +80,8 @@
 
     if (typeof $notification !== 'undefined') {
       $notification.post(
-        '九号响应体',
-        mode + ' · HTTP ' + status + ' · ' + s.length + 'B' + (ct ? ' · ' + ct.split(';')[0] : ''),
+        big ? '★九号响应体·明文' : '九号响应体',
+        title + (ct ? ' · ' + ct.split(';')[0] : ''),
         info + '\n' + path
       );
     }
