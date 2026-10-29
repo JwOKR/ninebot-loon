@@ -1,0 +1,22 @@
+#!name = 九号轨迹速度还原
+#!desc = 拦截九号出行APP轨迹接口，阶段1捕获响应结构，阶段2用GPS点计算并注入真实速度。仅还原数据显示，不改变车辆任何行为。
+#!icon = https://raw.githubusercontent.com/Tartarus2014/Loon-Script/master/Plugin/icon/ninebot.png
+
+# ========= 使用说明 =========
+# 1. Loon -> 配置 -> MITM：安装并信任CA证书（设置->通用->VPN与设备管理/证书信任）
+# 2. 脚本已托管 GitHub：script-path 直接使用远程链接，无需本地放置
+#    （如需本地调试，可改为 iCloud Drive/Loon/Script/ 下的相对路径）
+# 3. 先只启用阶段1（捕获），在APP里打开一次骑行记录/轨迹详情
+# 4. 查看Loon通知与 [脚本日志]，确认响应里有无速度字段、轨迹点字段名
+# 5. 再启用阶段2（注入），按捕获结果修改 ninebot-speed.js 顶部的字段候选表
+# ============================
+
+[MITM]
+hostname = %APPEND% cn-cbu-gateway.ninebot.com
+
+[Script]
+# 阶段1：捕获轨迹相关接口响应（先启用这个，确认数据结构后可停用）
+九号捕获 = type=http-response,pattern=^https?:\/\/cn-cbu-gateway\.ninebot\.com\/portal\/api\/(ride|track|trail|trip|trajectory|driv|run|mileage|travel|behav|gps|journey|sport),requires-body=1,max-size=0,script-path=https://raw.githubusercontent.com/JwOKR/ninebot-loon/main/ninebot-debug.js,timeout=60
+
+# 阶段2：GPS速度注入（确认字段名并调整候选表后再启用）
+九号注入 = type=http-response,pattern=^https?:\/\/cn-cbu-gateway\.ninebot\.com\/portal\/api\/(ride|track|trail|trip|trajectory|driv|run|mileage|travel|behav|gps|journey|sport),requires-body=1,max-size=0,script-path=https://raw.githubusercontent.com/JwOKR/ninebot-loon/main/ninebot-speed.js,timeout=60
