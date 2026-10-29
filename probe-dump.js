@@ -34,6 +34,11 @@
       var r = $persistentStore.read('nb_probe_last_route') || '';
       if (r.indexOf('PASS') === 0) mode = '基线原样';
       else if (r.indexOf('V6') === 0) mode = '改道v6';
+      else if (r.indexOf('H') === 0) {
+        var h = r.split('|')[1] || '';
+        var host = h.replace(/^https?:\/\//, '').split('/')[0];
+        mode = '改道 ' + host;
+      }
     } catch (e) {}
 
     var info;
