@@ -28,7 +28,10 @@
     var mode = '未知';
     try {
       var r = $persistentStore.read('nb_probe_last_route') || '';
-      if (r.indexOf('PASS') === 0) mode = '基线 cnnx-omsgw';
+      var r2 = $persistentStore.read('nb_bt_last') || '';
+      if (r2.indexOf('BT|') === 0) mode = '类目 ' + r2.split('|')[1];
+      else if (r2 === 'BASE') mode = '基线·读类目';
+      else if (r.indexOf('PASS') === 0) mode = '基线 cnnx-omsgw';
       else if (r.indexOf('V6') === 0) mode = '改道 v6';
       else if (r.indexOf('H|') === 0) {
         var h = r.split('|')[1] || '';
@@ -36,7 +39,9 @@
       }
     } catch (e) {}
 
-    var title = mode + ' · HTTP ' + status + ' · ' + s.length + 'B';
+    // 命中判定：响应明显超过基线 15556B 即视为多下发了字段
+    var blowup = s.length > 16200;
+    var title = (blowup ? '★★疑似命中★ ' : '') + mode + ' · HTTP ' + status + ' · ' + s.length + 'B';
     var info = '';
     var big = false;
 
@@ -80,7 +85,7 @@
 
     if (typeof $notification !== 'undefined') {
       $notification.post(
-        big ? '★九号响应体·明文' : '九号响应体',
+        big ? '★九号响应体·明文' : (blowup ? '★★九号响应体·变大' : '九号响应体'),
         title + (ct ? ' · ' + ct.split(';')[0] : ''),
         info + '\n' + path
       );
