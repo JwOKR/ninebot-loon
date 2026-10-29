@@ -235,14 +235,51 @@ DYNAMIC_CONF KEY = TOGfX#qkYm@0t{83}
 
 ---
 
+## 七之二、两代 API 之别（探针实测更新）
+
+**伪装 app-version 请求头的探针实测：响应字节数无变化 ⇒ 服务端不按 APP 版本下发。**
+
+真正的原因是新旧 RN 模块用了**两代不同的 API**（解密两个 bundle 后对比得出）：
+
+| | 旧模块 `Track v774` | 新模块 `TrackNew v905` |
+|---|---|---|
+| 详情 | `/app-api/travel/**v6**/travel-**info**` | `/app-api/travel/**v1**/travel/**query-info**` |
+| 列表 | `/app-api/travel/v6/travel-list-v2` | `/app-api/travel/v1/travel/query-list` |
+| 合并 | `/app-api/travel/v6/combine-travel` | `/app-api/travel/v1/travel/update` |
+| 删除 | `/app-api/travel/v6/deleteItem` | `/app-api/travel/v1/travel/deleteItems` |
+
+⇒ **降级 APP 到 6.6.8 之所以能显示速度，不是因为服务端看版本号，而是因为旧 APP 调的是老 v6 接口**，
+而老接口大概率还没做合规剔除。
+
+### 验证方法：`ninebot-probe.plugin` v2（改道探针）
+
+把 `http-request` 的 URL 改成老接口路径，Loon 会沿用原加密请求体原样转发（`requires-body` 无需开启），
+再用 `http-response` 比对状态码与字节数。每打开一次轨迹详情页自动轮换下一个候选，跑 3 次即可定性。
+
+```
+https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@e1510de/ninebot-probe.plugin
+```
+
+| 观测结果 | 结论 |
+|---|---|
+| 改道后 **200 且响应明显大于基线** | 老接口活着且返回更多字段，速度数据就在里面 |
+| 改道后 **200 但响应很小** | 接口活着但参数结构不兼容，需要进一步对齐入参 |
+| 改道后 **404 / 4xx / 5xx** | 老接口已下线，网络层彻底无解 |
+| 与基线一致 | 服务端按接口版本而非请求头区分，仍需解码才能确认 |
+
+改道期间 APP 大概率会报错或显示异常，属预期现象。
+
+---
+
 ## 八、文件清单
 
 | 文件 | 说明 |
 |---|---|
 | `ninebot_kit.py` | 离线分析工具包（提取KEY / 解密.nb / 导出RN配置 / 下载解密模块） |
-| `ninebot-probe.plugin` | Loon 探针插件：伪装旧版请求头 + 响应体积对比 |
-| `probe-spoof.js` | 改写请求头的 http-request 脚本 |
-| `probe-size.js` | 记录并对比响应字节数的 http-response 脚本 |
+| `ninebot-probe.plugin` | Loon 探针插件 v2：把 v1 请求改道给 v6 老接口 + 响应体积对比 |
+| `probe-v6.js` | `http-request` 脚本：轮换候选地把新接口请求改道到老接口 |
+| `probe-size.js` | `http-response` 脚本：记录状态码与字节数，通知里直接出对比 |
+| `probe-spoof.js` | 上一版：伪装旧版 APP 请求头（已证实无效，保留作记录） |
 | `ninebot-speed.plugin` | 早期版本的速度注入插件（因第1层加密不可行，保留作记录） |
 | `ninebot-debug.js` / `ninebot-speed.js` | 早期捕获与 GPS 算速注入脚本（同上，保留作记录） |
 
