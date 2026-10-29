@@ -1,70 +1,255 @@
-# 九号轨迹速度还原 · Loon 插件
+# 九号出行 · 逆向分析报告与离线工具包
 
-针对新版九号出行APP因新国标合规要求隐藏电动自行车轨迹速度的问题，
-尝试通过 Loon 网络脚本还原"轨迹图上的真实速度显示"。
+针对「新版九号出行 APP 电动自行车轨迹不显示实际速度」问题的完整逆向分析。
+分析对象：**九号出行 6.10.11 官方原版 APK**（arm64）。
 
-> ## ⚠️ 结论（2026-10-30 抓包验证后更新）
->
-> **网络层注入方案已确认不可行。** 抓包分析确认：九号出行APP的全部业务接口
-> 均采用**应用层加密**，请求/响应体统一为 `{"a":"<base64密文>"}` 封装，
-> 经解压测试确认非压缩、为真实加密负载。Loon 只能拿到密文，
-> 无法读取更无法改写其中的速度字段。
->
-> 可行路径见文末「替代方案」。仓库文件保留作为抓包与逆向的记录。
+---
 
-## 抓包关键发现（HAR 分析）
+## 一、结论速览
 
-- 骑行数据接口：`POST https://cnnx-omsgw.ninebot.com/app-api/travel/v1/travel/query-info`（约 10KB 加密负载）
-- 其他网关主机：`cn-cbu-gateway.ninebot.com`（签到/广告）、`api-jhcx-v6-bj.ninebot.com`（用户/消息）、`snssdk.ninebot.com`（日志上报，唯一明文）
-- 全部业务接口响应形如 `{"a":"..."}`，base64 解码后为无可读字符串的二进制密文
-- 密文头部结构（hex）：`6328 0000 0000 0000 2000 0000 01 <32字节> <密文>`，疑似长度字段 + 32字节密钥材料 + 密文
-
-## 原理与边界
-
-- **只还原数据显示**，不改变车辆限速、固件、控制行为（那才是违法改装）。
-- 两种可能场景：
-  - **A. 服务端仍下发速度字段**（旧版APP能显示说明数据大概率还在）→ 阶段1捕获即可确认，若APP因UI逻辑隐藏，网络层无法恢复显示，只能用降级APP方案。
-  - **B. 服务端已剔除速度字段** → 轨迹点串（经纬度+时间戳）仍在，阶段2脚本用相邻GPS点算出真实分段速度注入回响应，APP按原逻辑渲染。
-- 旧版APP降级方案（6.6.8）依然是显示还原度最高的方案，本插件适合不想降级、保持APP最新版的场景。
-
-## 文件
-
-| 文件 | 作用 |
+| 目标 | 结果 |
 |---|---|
-| `ninebot-speed.plugin` | Loon 插件（MITM + 两条脚本规则） |
-| `ninebot-debug.js` | 阶段1：捕获轨迹接口响应，报告有无速度字段、轨迹点结构 |
-| `ninebot-speed.js` | 阶段2：GPS Haversine 计算分段速度并注入响应 |
+| **网络层 MITM 注入（Loon 改写响应）** | ❌ **不可行**，业务接口是会话级加密，每条消息密钥不同 |
+| **解开 APP 内置资源 `.nb`** | ✅ **已破解**，AES-128-CBC，`KEY=IV=TOGfX#qkYm@0t{83}` |
+| **解开 RN 业务模块包** | ✅ **已破解**，key/iv 存于动态配置，65 个模块共用一套 |
+| **速度 UI 是否还在** | ✅ **还在**，TrackNew v905 里速度曲线代码完整，无隐藏开关 |
+| **服务端是否还下发速度** | ⚠️ 未证实，用本仓库探针插件可验证 |
 
-## 安装步骤
+**核心判断**：速度显示的开关不在客户端 UI，而在服务端下发的数据里。
+这正是「降级到 6.6.8 就恢复显示」现象的最合理解释——旧版 APP 请求到的响应里**有**速度字段。
 
-1. Loon → 配置 → MITM，安装并信任 CA 证书。
-2. 把两个 `.js` 放入 `iCloud Drive/Loon/Script/`（或托管到自己的 GitHub，改 `script-path` 为远程链接）。
-3. 本地导入 `ninebot-speed.plugin`。
-4. **先只跑阶段1**：打开九号APP → 骑行记录 → 任意一次轨迹详情。
-5. 看 Loon 通知/脚本日志：
-   - 提示"发现速度字段" → 数据还在，检查APP是否渲染；
-   - 提示"无速度字段（需阶段2）" → 启用阶段2注入脚本。
-6. 按阶段1捕获到的真实字段名，调整 `ninebot-speed.js` 顶部 `CANDIDATES` 候选表（LAT/LNG/TIME/SPEED_OUT 等键名），直到通知显示"注入完成"且APP轨迹页出现速度。
+---
 
-## 已知信息（来自社区抓包）
+## 二、九号的四层结构（与各层是否已破解）
 
-- API 网关：`cn-cbu-gateway.ninebot.com`，路径前缀 `/portal/api/`
-- 参考接口：`/portal/api/user-sign/v2/sign`（响应为明文 JSON，无需解密）
-- 轨迹类接口具体路径需阶段1确认（插件已用宽匹配覆盖 ride/track/trail/trip 等关键词）
+```
+[第0层] HTTPS / TLS
+        └ 常规，可 MITM
 
-## 注意事项
+[第1层] 业务接口传输加密            ❌ 未破解
+        POST https://cnnx-omsgw.ninebot.com/app-api/travel/v1/travel/query-info
+        响应体 {"a":"<base64>"}
+        └ base64 后为自定义二进制信封 + 会话密钥加密（见 §3）
 
-- GPS 推算速度与仪表速度存在 1~3km/h 级固有误差（采样间隔越大误差越大）。
-- 九号若对响应做签名校验，注入可能被APP拒绝——阶段1结果可判断。
-- 接口路径/字段随APP版本变动，失效时回到阶段1重新捕获即可。
+[第2层] APP 内置资源 assets/*.nb     ✅ 已破解
+        AES-128-CBC, KEY=IV=TOGfX#qkYm@0t{83}
 
-## 替代方案（按可行性排序）
+[第3层] RN 业务模块包 *.nb           ✅ 已破解
+        key=",]Q&STDIg@ZcQ.6t"  iv="bCGRM{TR&UHzC-2r"
+        └ 解出来是 Hermes 字节码包（含全部 JS 字符串）
+```
 
-1. **APP 降级到 6.6.8**（社区验证有效，iOS 用爱思助手+nb助手，安卓装旧版 apk）
-   - 降级后可恢复轨迹的时间/速度/功耗显示
-   - 代价：不能再升级 APP、车辆固件不能更新
-2. **独立 GPS 记录**：骑行时用行者 / 两步路 / Strava 单独记录，速度与轨迹完整，不受九号限制
-3. **安卓 LSPosed 模块**：如 NinebotEnhance，在应用进程内 hook 解密后的数据层，绕过应用层加密（需 Root/LSPosed，iOS 不适用）
-4. **BLE 直连读速**：九号 BLE 协议可直读车速，可自建工具显示实时速度，但不写入 APP 轨迹图
+---
 
-iOS 未越狱的情况下，网络层已无可行路径，方案 1 或 2 是现实选择。
+## 三、第1层：为什么网络注入不可行
+
+### 3.1 信封结构（12 条样本全部吻合）
+
+```
+偏移  0..3    载荷长度 u32(LE)   —— 恒等于 len(body) - 16
+偏移  4..7    0
+偏移  8..11   0x20 (=32)
+偏移 12       0x01（版本/算法标记）
+偏移 13..15   随机
+偏移 16..47   32 字节（疑似会话密钥材料）
+偏移 48..     载荷
+```
+
+### 3.2 判定依据
+
+- **是流密码**：载荷长度 `((len-16)-32) % 16` 在各条之间取不同值（0/2/3/6/10/12/13/15），
+  不是 16 的倍数 ⇒ 不是 AES-CBC/ECB（那必然是 16 的倍数），而是 **RC4 类流密码**。
+- **每条密钥不同**：对两条响应做异或，无长段零区 ⇒ 不是复用 keystream，
+  无法做多密文复用攻击（此路已试，全乱码）。
+- **不是压缩**：base64 后无 gzip / zlib 头，无可读字符串。
+
+### 3.3 该层密码归谁管
+
+`libnbenc_ffi.so` / `libnbcrypto.so`（Rust 编写），关键导出符号：
+
+```
+crypto_init / crypto_setAuthParam / crypto_encrypt / crypto_decrypt
+nb_encrypt(crypto_param_t*, u8*, u16, u8*)   nb_decrypt(...)
+Key_rule_analysis(u8*, u8*, key_rule_t*)     ← 每消息密钥派生
+AES_init_ctx / AES_ECB_encrypt / AES_ECB_decrypt   (tiny-AES)
+Encryption::rc4 / rc4_init / rc4_setup / rc4_crypt  ← 载荷流加密
+MD5::encode / MD5::decode, mbedtls_sha1*
+Java_cn_ninebot_nbcrypto_NbEncryption_crypto_{init,setKey,setAuthParam,encrypt,decrypt}
+```
+
+会话密钥由 `setAuthParam` 协商 + `Key_rule_analysis` 派生，**框架内的 32 字节即每次的密钥材料**。
+要解密必须完整逆出该函数——属于多日工作量，且逆出来后还需逐包提取密钥材料。
+
+### 3.4 顺带确认：另一套「版本+时间戳」加密（非此层）
+
+`cn.ninebot.lib.authcenter.utils.SignatureUtil` 有另一套，供登录/鉴权类接口使用：
+
+```java
+key    = SHA256(app_version + timestamp + os)[0:16]     // 三个值都在明文请求头里
+cipher = AES/ECB/PKCS5Padding(Base64(Base64(plaintext)))
+输出   = Base64(Base64(ciphertext))
+```
+
+这套**不是** `cnnx-omsgw` 轨迹接口用的（已实测不符），记录在此备用。
+
+---
+
+## 四、第2层：`.nb` 资源文件 —— 已破解
+
+### 4.1 在哪里
+
+`assets/backup_config.nb`（215 KB）以及从服务端下发的 RN 模块包。
+
+格式：**明文 base64 文本 → AES-128-CBC → PKCS7 去填充**
+
+### 4.2 KEY / IV 怎么来的
+
+藏在 `lib/arm64-v8a/libnativesecrets.so` 的 JNI 函数里：
+
+```
+Java_cn_ninebot_nativesecrets_NativeSecrets_nativeDynamicConfigKey   @0x15c88
+Java_cn_ninebot_nativesecrets_NativeSecrets_nativeDynamicConfigIV    @0x15d80
+```
+
+常量**不是**明文字符串，而是逐字节 XOR 混淆后由 ADRP 指向的两张表。反汇编后是一个循环：
+
+```asm
+strb   w12, [sp, #1]          ; 字符串首字符 0x54 ('T')
+adrp   x10, #0xd000; add x10, x10, #0x9d0   ; 密文表 A @0xd9d0
+adrp   x11, #0xd000; add x11, x11, #0xb8f   ; 掩码表 M @0xdb8f
+loop i = 1..15:
+    w13 = A[i]
+    w14 = M[i & 7]
+    ss[i] = w13 ^ w14
+```
+
+掩码表原文恰好是 **`N9BotSec`**（8 字节），可作为解对与否的自校验。
+
+还原结果：
+
+```
+KEY = IV = TOGfX#qkYm@0t{83        (hex: 544f47665823716b596d4030747b3833)
+```
+
+> **这就是传说中「6.10.11 这一版特有的坑」**：常量不再以明文字符串形式存放，
+> 而是按字节 XOR 打散进立即数与两张地址表，常规 `strings` 扫不出来。
+
+### 4.3 解开后是什么
+
+`assets/backup_config.nb` 解出来是 RN 动态配置 JSON，含 3 个顶层键：`rn` / `pkg` / `searchConfig`，
+其中 `rn` 下是 **65 个业务模块**的下载 URL、版本号，以及各自的 key/iv（65 个模块共用一套）：
+
+```
+key = ",]Q&STDIg@ZcQ.6t"
+iv  = "bCGRM{TR&UHzC-2r"
+```
+
+`searchConfig` 里还标明了车型归类：
+
+```json
+"assisted_ebike": { "host": "https://cnnx-omsgw.ninebot.com" }   ← 电助力车走这个网关
+```
+
+---
+
+## 五、第3层：RN 业务模块 —— 已破解，且是决定性证据
+
+以轨迹模块 `TrackNew` v905 为例（下载 URL 公开，无需鉴权）：
+
+```
+https://oms-oss-public.ninebot.com/device-config/rn/1789710796587_TrackNew_android_v905_inland.zip
+```
+
+解开后是 **Hermes 字节码包**（magic `C61FBC03C103191F`），含 15967 条 JS 字符串。
+在其中检索到以下**全部存在**：
+
+| 证据 | 含义 |
+|---|---|
+| `speedChartData` | 速度曲线数据源仍在 |
+| `TrackDetail.speedHigh / speedMidHigh / speedMid / speedLow` | 速度分档标签文案仍在 |
+| `TrackDetail.speedDashLine` | 速度虚线（参考线）仍在 |
+| `TrackDetail.ridingSpeedHighestSpeed / ridingSpeedMidHigh / ridingSpeedMidLow` | 骑行速度档位文案仍在 |
+| `TrackDetail.fastLabel / slowLabel` | 快/慢标签仍在 |
+| `averageSpeedLineColorDark/Light`、`averageSpeedTextColorDark/Light` | 平均速度曲线主题配色仍在 |
+| `avgLineColorDark`、`avgTextColorDark` | 平均速度图例仍在 |
+| `TrackDetail.avgSpeed`、`TrackDetail.shareAvgSpeed` | 详情页与分享卡速度文案仍在 |
+| `config.restSpeedThreshold` | 静止速度阈值配置仍在 |
+
+同时**检索不到任何客户端隐藏开关**：`showSpeed` / `isSpeed` / `hideSpeed` /
+`speedSwitch` / `compliance` / `nationalStandard` **全部 0 命中**。
+
+### ⇒ 结论
+
+**新 APP 的客户端代码完全没有删除速度功能。** 既然 UI 俱全却看不到速度，
+只能说明：**服务端没有下发速度字段**。这个问题在 APP 侧、通过网络层是改不出来的。
+
+---
+
+## 六、下一步：验证「服务端按 APP 版本下发」
+
+既然客户端没开关，社区反馈「降级到 6.6.8 就恢复」就有了另一种解释——
+**旧版 APP 的请求头让服务端返回了完整数据**（很可能依据 `app-version` / `client-ver` / `ninebot-version`）。
+
+这些请求头都是**明文**的，Loon 完全可以改写 ⇒ 不需要破解加密。
+
+本仓库提供 `ninebot-probe.plugin` 做这个验证：
+
+1. 先设 `SPOOF = false` 跑一次，记录 `travel/query-info` 的响应字节数（基线）
+2. 再设 `SPOOF = true`（伪装旧版版本号）跑一次
+3. **若同一接口响应明显变大 ⇒ 假设成立**，调版本常量直到拿到含速度的响应
+4. 若完全不变 ⇒ 服务端不按版本区分，需另找条件（车型 / region）
+
+因为响应是加密的，**唯一可观测信号就是长度变化**，但这已足够判定。
+
+### 如何确定旧版版本号
+
+需要一份 6.6.8 的 APK：安装后抓包看它的 `app-version` / `client-ver` 值，
+或直接用本仓库的 `ninebot_kit.py key <旧版APK>` 走同一流程。
+
+---
+
+## 七、工具包用法
+
+```bash
+pip install cryptography capstone
+
+# 1) 从 APK 提取 DYNAMIC_CONF 的 KEY/IV（含自校验）
+python ninebot_kit.py key 九号出行_6.10.11_官方原版.apk
+
+# 2) 导出 RN 动态配置：65 个模块的 URL + key/iv
+python ninebot_kit.py rnconfig 九号出行_6.10.11_官方原版.apk
+
+# 3) 下载并解密指定 RN 模块，顺带导出包内 JS 字符串
+python ninebot_kit.py fetch TrackNew --strings
+
+# 4) 单独解密某个 .nb 文件
+python ninebot_kit.py nb backup_config.nb --key 'TOGfX#qkYm@0t{83}'
+```
+
+实测输出：
+
+```
+DYNAMIC_CONF KEY = TOGfX#qkYm@0t{83}
+自校验：assets/backup_config.nb -> IV=KEY 成功 ✓ {"rn":[{"applyRegion":["bj"],"detail":[{"modul
+```
+
+---
+
+## 八、文件清单
+
+| 文件 | 说明 |
+|---|---|
+| `ninebot_kit.py` | 离线分析工具包（提取KEY / 解密.nb / 导出RN配置 / 下载解密模块） |
+| `ninebot-probe.plugin` | Loon 探针插件：伪装旧版请求头 + 响应体积对比 |
+| `probe-spoof.js` | 改写请求头的 http-request 脚本 |
+| `probe-size.js` | 记录并对比响应字节数的 http-response 脚本 |
+| `ninebot-speed.plugin` | 早期版本的速度注入插件（因第1层加密不可行，保留作记录） |
+| `ninebot-debug.js` / `ninebot-speed.js` | 早期捕获与 GPS 算速注入脚本（同上，保留作记录） |
+
+---
+
+## 九、合规声明
+
+本仓库只做**本地离线数据解析**，用于理解自有设备的数据格式。
+不涉及车辆固件修改、不限速解除、不伪造上行控制指令（那才是违法改装）。
+请勿将本工具用于违反厂商服务条款或法律法规的用途。

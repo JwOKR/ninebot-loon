@@ -1,0 +1,4 @@
+*.zip
+*.hbc
+*_strings.txt
+__pycache__/
