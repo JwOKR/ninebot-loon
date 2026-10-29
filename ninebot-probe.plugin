@@ -1,11 +1,11 @@
-#!name = 九号网关探针 v5
-#!desc = 电助力(assisted_ebike)独立后端排查：轮换改道到欧区/ebike/os_ebike/steeldust 网关
+#!name = 九号网关探针 v6
+#!desc = OMS 同族网关轮换：dev / test3 / eu / fra / sg-test / sg-uat，找不开加密不开合规的环境
 #!author = JwOKR
 #!date = 2026-10-30
 
 [MITM]
-hostname = cnnx-omsgw.ninebot.com, fra-oms-gateway.ninebot.com, ebike.ninebot.com, ebike-os.ninebot.com, steeldust.ninebot.com
+hostname = cnnx-omsgw.ninebot.com, cn-dev-oms-gateway.ninebot.com, cn-test3-oms-gateway.ninebot.com, eu-oms-gateway.ninebot.com, fra-oms-gateway.ninebot.com, sg-test1-oms-gateway.ninebot.com, sg-uat-oms-gateway.ninebot.com
 
 [Script]
-http-request ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@ed436675701cb1eae91d442eb47f39ed1067d11c/probe-host.js,tag=nb-host,enable=true
-http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@ed436675701cb1eae91d442eb47f39ed1067d11c/probe-dump.js,requires-body=true,tag=nb-dump,enable=true
+http-request ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@8b8b7c913d4b206af0095db1e3aa8b0142224b65/probe-host.js,tag=nb-host,enable=true
+http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@8b8b7c913d4b206af0095db1e3aa8b0142224b65/probe-dump.js,requires-body=true,tag=nb-dump,enable=true
