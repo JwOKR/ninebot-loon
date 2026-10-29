@@ -7,5 +7,5 @@
 hostname = cn-cbu-gateway.ninebot.com
 
 [Script]
-capture = type=http-response,pattern=^https?:\/\/cn-cbu-gateway\.ninebot\.com\/portal\/api\/(ride|track|trail|trip|trajectory|driv|run|mileage|travel|behav|gps|journey|sport),requires-body=true,script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@main/ninebot-debug.js,timeout=60
-inject = type=http-response,pattern=^https?:\/\/cn-cbu-gateway\.ninebot\.com\/portal\/api\/(ride|track|trail|trip|trajectory|driv|run|mileage|travel|behav|gps|journey|sport),requires-body=true,script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@main/ninebot-speed.js,timeout=60
+http-response ^https?:\/\/cn-cbu-gateway\.ninebot\.com\/portal\/api\/(ride|track|trail|trip|trajectory|driv|run|mileage|travel|behav|gps|journey|sport) script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@main/ninebot-debug.js,tag=nb-capture,requires-body=true,enable=true,timeout=60
+http-response ^https?:\/\/cn-cbu-gateway\.ninebot\.com\/portal\/api\/(ride|track|trail|trip|trajectory|driv|run|mileage|travel|behav|gps|journey|sport) script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@main/ninebot-speed.js,tag=nb-inject,requires-body=true,enable=true,timeout=60
