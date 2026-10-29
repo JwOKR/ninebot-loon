@@ -1,5 +1,5 @@
-#!name = Ninebot Probe
-#!desc = 九号轨迹速度下发条件探针：伪装旧版APP请求头，对比加密响应体积变化
+#!name = Ninebot Probe v2
+#!desc = 九号轨迹速度探针：把新版 v1/travel/query-info 请求改道给老的 v6/travel-info 接口，对比响应
 #!author = JwOKR
 #!date = 2026-10-30
 
@@ -7,5 +7,5 @@
 hostname = cnnx-omsgw.ninebot.com
 
 [Script]
-http-request ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@8fe4c0f/probe-spoof.js,requires-body=true,tag=nb-spoof,enable=true
-http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@8fe4c0f/probe-size.js,requires-body=true,tag=nb-size,enable=true
+http-request ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel\/v1\/travel\/query-info script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@2b6bea9/probe-v6.js,tag=nb-route,enable=true
+http-response ^https?:\/\/cnnx-omsgw\.ninebot\.com\/app-api\/travel script-path=https://cdn.jsdelivr.net/gh/JwOKR/ninebot-loon@2b6bea9/probe-size.js,requires-body=true,tag=nb-size,enable=true
